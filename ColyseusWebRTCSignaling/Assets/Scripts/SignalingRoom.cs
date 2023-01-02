@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Unity.WebRTC;
 using UnityEngine;
@@ -52,7 +53,7 @@ public class SignalingRoom : BaseRoomManager<object>
 
     private Dictionary<string, RTCPeerConnection> peers = new Dictionary<string, RTCPeerConnection>();
     private Dictionary<string, MediaStream> peerReceiveStreams = new Dictionary<string, MediaStream>();
-    private Dictionary<string, AudioSource> peerAudioOutputSources = new Dictionary<string, AudioSource>();
+    private Dictionary<string, Dictionary<string, AudioSource>> peerAudioOutputSources = new Dictionary<string, Dictionary<string, AudioSource>>();
     private AudioClip audioInputClip;
     private AudioStreamTrack audioInputTrack;
     private MediaStream sendStream;
@@ -146,6 +147,7 @@ public class SignalingRoom : BaseRoomManager<object>
         var peerMediaStream = new MediaStream();
         peerMediaStream.OnAddTrack = (trackEvent) =>
         {
+            var trackId = trackEvent.Track.Id;
             if (trackEvent.Track is VideoStreamTrack videoTrack)
             {
                 videoTrack.OnVideoReceived += (Texture texture) =>
@@ -156,18 +158,19 @@ public class SignalingRoom : BaseRoomManager<object>
             if (trackEvent.Track is AudioStreamTrack audioTrack)
             {
                 // Play audio
-                if (peerAudioOutputSources.ContainsKey(sessionId))
+                if (peerAudioOutputSources.ContainsKey(sessionId) && peerAudioOutputSources[sessionId].ContainsKey(trackId))
                 {
-                    Debug.LogWarning($"Adding audio track for {sessionId} again, it actually should has only one?");
-                    Object.Destroy(peerAudioOutputSources[sessionId].gameObject);
-                    peerAudioOutputSources.Remove(sessionId);
+                    Debug.LogWarning($"Adding audio track for {sessionId}/{trackId} again, it actually should has only one?");
+                    Object.Destroy(peerAudioOutputSources[sessionId][trackId].gameObject);
+                    peerAudioOutputSources[sessionId].Remove(trackId);
                 }
-
-                var audioOutputSource = new GameObject($"{sessionId}_AudioOutputSource").AddComponent<AudioSource>();
+                if (!peerAudioOutputSources.ContainsKey(sessionId))
+                    peerAudioOutputSources.Add(sessionId, new Dictionary<string, AudioSource>());
+                var audioOutputSource = new GameObject($"{sessionId}/{trackId}_AudioOutputSource").AddComponent<AudioSource>();
                 audioOutputSource.SetTrack(audioTrack);
                 audioOutputSource.loop = true;
                 audioOutputSource.Play();
-                peerAudioOutputSources[sessionId] = audioOutputSource;
+                peerAudioOutputSources[sessionId][trackId] = audioOutputSource;
             }
         };
         peerReceiveStreams[sessionId] = peerMediaStream;
@@ -214,9 +217,14 @@ public class SignalingRoom : BaseRoomManager<object>
             peerReceiveStreams.Remove(sessionId);
         }
 
-        if (peerAudioOutputSources.TryGetValue(sessionId, out var peerAudioOutputSource))
+        if (peerAudioOutputSources.ContainsKey(sessionId))
         {
-            Object.Destroy(peerAudioOutputSource.gameObject);
+            var trackIds = new List<string>(peerAudioOutputSources[sessionId].Keys);
+            foreach (var trackId in trackIds)
+            {
+                Object.Destroy(peerAudioOutputSources[sessionId][trackId].gameObject);
+                peerAudioOutputSources[sessionId].Remove(trackId);
+            }
             peerAudioOutputSources.Remove(sessionId);
         }
 
