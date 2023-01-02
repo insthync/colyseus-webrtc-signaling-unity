@@ -54,7 +54,13 @@ public class SignalingRoom : BaseRoomManager<object>
 
     private Dictionary<string, RTCPeerConnection> peers = new Dictionary<string, RTCPeerConnection>();
     private Dictionary<string, MediaStream> peerReceiveStreams = new Dictionary<string, MediaStream>();
+    private Dictionary<string, AudioSource> peerAudioOutputSources = new Dictionary<string, AudioSource>();
+    private AudioClip audioInputClip;
+    private AudioStreamTrack audioInputTrack;
     private MediaStream sendStream;
+    private string micDeviceName;
+    private int samplingFrequency = 48000;
+    private int lengthSeconds = 1;
 
     public SignalingRoom() : base("signalingRoom", new Dictionary<string, object>())
     {
@@ -83,27 +89,22 @@ public class SignalingRoom : BaseRoomManager<object>
         return false;
     }
 
-    AudioClip m_clipInput;
-    int m_samplingFrequency = 48000;
-    int m_lengthSeconds = 1;
-    string m_deviceName = null;
-    AudioStreamTrack m_audioTrack;
-
     private void SetupRoom()
     {
         Room.OnMessage<OnAddPeerMsg>("addPeer", OnAddPeer);
         Room.OnMessage<OnCandidateMsg>("candidate", OnCandidate);
         Room.OnMessage<OnDescMsg>("desc", OnDesc);
 
-        m_clipInput = Microphone.Start(m_deviceName, true, m_lengthSeconds, m_samplingFrequency);
+        micDeviceName = Microphone.devices[0];
+        audioInputClip = Microphone.Start(micDeviceName, true, lengthSeconds, samplingFrequency);
         // set the latency to “0” samples before the audio starts to play.
-        while (!(Microphone.GetPosition(m_deviceName) > 0)) { }
+        while (!(Microphone.GetPosition(micDeviceName) > 0)) { }
 
         ClientInstance.Instance.inputAudioSource.loop = true;
-        ClientInstance.Instance.inputAudioSource.clip = m_clipInput;
+        ClientInstance.Instance.inputAudioSource.clip = audioInputClip;
         ClientInstance.Instance.inputAudioSource.Play();
 
-        m_audioTrack = new AudioStreamTrack(ClientInstance.Instance.inputAudioSource);
+        audioInputTrack = new AudioStreamTrack(ClientInstance.Instance.inputAudioSource);
         sendStream = new MediaStream();
     }
 
@@ -140,7 +141,7 @@ public class SignalingRoom : BaseRoomManager<object>
         {
             peerReceiveStreams[sessionId].AddTrack(trackEvent.Track);
         };
-        peerConnection.AddTrack(m_audioTrack, sendStream);
+        peerConnection.AddTrack(audioInputTrack, sendStream);
         peers[sessionId] = peerConnection;
 
         // Create media receive stream
@@ -157,6 +158,18 @@ public class SignalingRoom : BaseRoomManager<object>
             if (trackEvent.Track is AudioStreamTrack audioTrack)
             {
                 // Play audio
+                if (peerAudioOutputSources.ContainsKey(sessionId))
+                {
+                    Debug.LogWarning($"Adding audio track for {sessionId} again, it actually should has only one?");
+                    Object.Destroy(peerAudioOutputSources[sessionId].gameObject);
+                    peerAudioOutputSources.Remove(sessionId);
+                }
+
+                var audioOutputSource = new GameObject($"{sessionId}_AudioOutputSource").AddComponent<AudioSource>();
+                audioOutputSource.SetTrack(audioTrack);
+                audioOutputSource.loop = true;
+                audioOutputSource.Play();
+                peerAudioOutputSources[sessionId] = audioOutputSource;
             }
         };
         peerReceiveStreams[sessionId] = peerMediaStream;
