@@ -1,5 +1,3 @@
-using Newtonsoft.Json;
-using System.Collections;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unity.WebRTC;
@@ -92,6 +90,7 @@ public class SignalingRoom : BaseRoomManager<object>
     private void SetupRoom()
     {
         Room.OnMessage<OnAddPeerMsg>("addPeer", OnAddPeer);
+        Room.OnMessage<string>("removePeer", OnRemovePeer);
         Room.OnMessage<OnCandidateMsg>("candidate", OnCandidate);
         Room.OnMessage<OnDescMsg>("desc", OnDesc);
 
@@ -125,9 +124,8 @@ public class SignalingRoom : BaseRoomManager<object>
             return;
         }
 
-        var config = CreateRTCConfiguration();
-
         // Create new peer connection
+        var config = CreateRTCConfiguration();
         var peerConnection = new RTCPeerConnection(ref config);
         peerConnection.OnIceCandidate = async (RTCIceCandidate candidate) =>
         {
@@ -205,6 +203,28 @@ public class SignalingRoom : BaseRoomManager<object>
             }
 
             await SendDesc(sessionId, desc);
+        }
+    }
+
+    private void OnRemovePeer(string sessionId)
+    {
+        if (peerReceiveStreams.TryGetValue(sessionId, out var peerReceiveStream))
+        {
+            peerReceiveStream.Dispose();
+            peerReceiveStreams.Remove(sessionId);
+        }
+
+        if (peerAudioOutputSources.TryGetValue(sessionId, out var peerAudioOutputSource))
+        {
+            Object.Destroy(peerAudioOutputSource.gameObject);
+            peerAudioOutputSources.Remove(sessionId);
+        }
+
+        if (peers.TryGetValue(sessionId, out var peer))
+        {
+            peer.Close();
+            peer.Dispose();
+            peers.Remove(sessionId);
         }
     }
 
