@@ -86,9 +86,4 @@ public class BaseRoomManager<T>
             Room = null;
         }
     }
-
-    protected virtual async void OnApplicationQuit()
-    {
-        await Leave();
-    }
 }

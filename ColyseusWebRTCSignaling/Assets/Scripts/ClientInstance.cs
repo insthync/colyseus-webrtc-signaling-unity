@@ -68,6 +68,11 @@ public class ClientInstance : MonoBehaviour
         }
     }
 
+    private async void OnApplicationQuit()
+    {
+        await LeaveSignalingRoom();
+    }
+
     private void Start()
     {
         // Test codes
