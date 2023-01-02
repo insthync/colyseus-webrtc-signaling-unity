@@ -8,6 +8,7 @@ public class ClientInstance : MonoBehaviour
 
     public string address = "localhost:2567";
     public bool secured = false;
+    public AudioSource inputAudioSource;
 
     public SignalingRoom SignalingRoom { get; private set; } = null;
 
@@ -65,5 +66,11 @@ public class ClientInstance : MonoBehaviour
             await SignalingRoom.Leave();
             SignalingRoom = null;
         }
+    }
+
+    private void Start()
+    {
+        // Test codes
+        JoinSignalingRoom();
     }
 }
